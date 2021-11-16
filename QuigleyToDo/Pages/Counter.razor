@@ -1,0 +1,24 @@
+﻿@page "/counter"
+
+@using QuigleyToDo.Data
+@inject TimerService TService
+
+<div style="background-color:aquamarine">
+    <h1>Counter</h1>
+
+    <p>Current count: @currentCount</p>
+
+    <button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+</div>
+
+
+
+
+@code {
+    private int currentCount = 0;
+
+    private void IncrementCount()
+    {
+        currentCount++;
+    }
+}

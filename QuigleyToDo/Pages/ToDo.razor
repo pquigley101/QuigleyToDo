@@ -1,0 +1,759 @@
+﻿@page "/todo"
+
+<style>
+    body {
+        background-color: #ffffff;
+        margin: 0;
+        padding: 0;
+    }
+
+    #rcorners2 {
+        border-radius: 20px;
+        border: 2px solid #449bcb;
+    }
+</style>
+
+@using QuigleyToDo.DataAccess;
+@using QuigleyToDo.DataAccess.Model;
+@using System.Collections.ObjectModel;
+@using Radzen.Blazor;
+@using System.IO;
+@using Microsoft.AspNetCore.Hosting;
+@using QuigleyToDo.Data;
+
+
+
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+@inject IWebHostEnvironment Env
+@inject IJSRuntime JSRuntime
+@inject DataProvider _dp
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor contextAccessor
+
+@implements IDisposable
+
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        /* Create two unequal columns that floats next to each other */
+        .column {
+            float: left;
+            padding: 0px;
+            margin: 0px;
+        }
+
+        .left {
+            width: 60%;
+        }
+
+        .right {
+            width: 40%;
+        }
+
+        /* Clear floats after the columns */
+        .row:after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+    </style>
+</head>
+<body>
+    <div class="row">
+        <div class="column left" style="overflow:hidden">
+            <div id="rcorners2" style="margin-top:30px;">
+                
+                <div style="border-bottom: solid 1px #449bcb; padding:10px;">
+                    <h2 class="left-panel-hdr">Task List</h2>
+                </div>
+
+                <div style="margin-bottom: 5px; padding:10px;">
+                    <table width="100%">
+                        <tr>
+                            <td align="right">
+                                <span>
+                                    <RadzenButton Icon="add_circle_outline" Text="Add" Click="@InsertTask" />
+                                    <RadzenButton Icon="add_circle_outline" Text="Refresh" ButtonStyle="ButtonStyle.Secondary" Click="@RefreshTaskGrid" />
+                                    <RadzenCheckBox Style="margin-left: 5px;" Name="CbShowAllTasks" TValue="bool" Change=@(args => OnCbShowAllTasksChanged(args, "CbShowAllTasks")) />
+                                    <RadzenLabel Text="Show All" Component="CbShowAllTasks" @bind-Value=@showAllFlag />
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+                    <div style="margin-top:5px;">
+                        <RadzenDataGrid @ref="tasksGrid" SelectionMode="DataGridSelectionMode.Single" RowDeselect="@RowDeselect" RowSelect="@RowSelect" IsLoading="@isLoading" Count="@count" Data="@tasks" RowCreate="@OnCreateRow"
+                                         AllowSorting="true" AllowFiltering="true" AllowPaging="true" PageSize="5" TItem="QTDTask" EditMode="DataGridEditMode.Single"
+                                        RowUpdate="@OnUpdateRow">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="QTDTask" Property="TaskDesc" Title="Task" Width="130px">
+                                    <EditTemplate Context="nTask">
+                                        <RadzenTextBox @bind-Value="nTask.TaskDesc" Style="width:100%; display: block" Name="Task" />
+                                        @*<RadzenRequiredValidator Text="Task is required" Component="TaskDesc" Popup="true" />*@
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="QTDTask" Property="DueDate" FormatString="{M/d/yyyy HH:mm}" Title="Complete By" Width="120px">
+                                    <Template Context="nTask">
+                                        @String.Format("{0:g}", nTask.DueDate)
+                                    </Template>
+                                    <EditTemplate Context="nTask">
+                                        <RadzenDatePicker HourFormat="12" DateFormat="MM/dd/yyyy h:mm tt" ShowTime="true" @bind-Value="nTask.DueDate" Style="width:100%" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="QTDTask" Property="TaskStatus" Title="Status" Width="100px">
+                                    <EditTemplate Context="nTask">
+                                        <RadzenDropDown @bind-Value="nTask.TaskStatusID" Data="@taskStatusOptions" TextProperty="TaskStatusDesc" ValueProperty="TaskStatusID" Style="width:100%" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="QTDTask" Property="Reminder" Title="Reminder" Width="100px">
+                                    <EditTemplate Context="nTask">
+                                        <RadzenDropDown @bind-Value="nTask.ReminderID" Data="@reminders" TextProperty="ReminderScheduleDesc" ValueProperty="ReminderID" Style="width:100%" />
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="QTDTask" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="40px">
+                                    <Template Context="nTask">
+                                        <RadzenButton Icon="edit" Size="ButtonSize.Small" Click="@(args => EditRow(nTask))" @onclick:stopPropagation="true">
+                                        </RadzenButton>
+                                    </Template>
+                                    <EditTemplate Context="nTask">
+                                        <RadzenButton Icon="save" Size="ButtonSize.Small" Click="@((args) => SaveRow(nTask))">
+                                        </RadzenButton>
+                                        <RadzenButton Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="@((args) => CancelEdit(nTask))">
+                                        </RadzenButton>
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="QTDTask" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="30px">
+                                    <Template Context="nTask">
+                                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" Click="@(args => DeleteRow(nTask))" @onclick:stopPropagation="true">
+                                        </RadzenButton>
+                                    </Template>
+                                    <EditTemplate Context="nTask">
+                                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" Click="@(args => DeleteRow(nTask))">
+                                        </RadzenButton>
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </div>
+
+                    <div hidden="@IsHideDetailPane">
+                        <div style="width: 100%; border-bottom: solid 1px #449bcb; margin-top:10px;">
+                            <table>
+                                <tr>
+                                    <td><RadzenIcon Icon="event" /></td>
+                                    <td><h4 class="left-panel-hdr">@SelectedTaskDescHdr</h4></td>
+                                </tr>
+                            </table>
+                        </div>
+                        
+                        <div class="row" style="padding: 10px; width: 100%;">
+                            <table width="100%">
+                                <tr>
+                                    <td>
+                                        <RadzenLabel Text="Task" />
+                                    </td>
+                                    <td>
+                                        <RadzenTextBox Disabled="true" @bind-Value=@SelectedTaskDesc style="width: 100%;" Name="rtbSelectedTaskDesc" />
+                                    </td>
+                                    <td style="padding-left:15px;">
+                                        <RadzenLabel Text="Complete By" />
+                                    </td>
+                                    <td style="padding-left:15px;">
+                                        <RadzenDatePicker Disabled="true" HourFormat="12" DateFormat="MM/dd/yyyy h:mm tt" ShowTime="true" @bind-Value=@SelectedTaskDueDate Style="width:100%" />
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <RadzenLabel Text="Status" />
+                                    </td>
+                                    <td>
+                                        <RadzenDropDown Disabled="true" @bind-Value=@SelectedTaskStatus Data="@taskStatusOptions" TextProperty="TaskStatusDesc" ValueProperty="TaskStatusID" Style="width:100%" />
+                                    </td>
+                                    <td style="padding-left:15px;">
+                                        <RadzenLabel Text="Reminder" />
+                                    </td>
+                                    <td style="padding-left:15px;">
+                                        <RadzenDropDown Disabled="true" @bind-Value=@SelectedTaskReminder Data="@reminders" TextProperty="ReminderScheduleDesc" ValueProperty="ReminderID" Style="width:100%" />
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <div style="vertical-align:top;">
+                                <RadzenLabel Text="Attachments" />
+                            </div>
+                            <br>
+                            <div>
+                                @if (attachments != null)
+                                {
+                                    <table class="table table-striped" style="font-family:Calibri; font-size:14px;">
+                                        <tbody>
+                                            @foreach (var a in attachments)
+                                            {
+                                                <tr>
+                                                    <td width="30px">
+                                                        @{ bool t = a.IsImage; }
+                                                        @if (t == true)
+                                                        {
+                                                            <img src="@a.Thumbnail" width="25" height="25" />
+
+                                                        }
+                                                        else
+                                                        {
+                                                            <img src="doc48.png" width="25" height="25" />
+                                                        }
+                                                    </td>
+                                                    <td valign="bottom">
+                                                        <a target="_blank" href="@a.TaskAttachmentLink">@a.TaskAttachmentLinkFriendly</a>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                }
+                                <InputFile OnChange="HandleFileSelection"></InputFile>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+
+        <div class="column right">
+            <div id="rcorners2" style="margin-top:30px; margin-left: 20px; margin-right:20px;">
+                <div style="border-bottom: solid 1px #449bcb; padding:10px;">
+                    <h2 class="left-panel-hdr">Dashboard</h2>
+                </div>
+                <div style="padding:10px;">
+                    <div style="width: 100%; border-bottom: solid 1px #449bcb; margin-top:10px;">
+                        <h4 class="left-panel-hdr">Task Reminders</h4>
+                    </div>
+                    <div hidden="@IsHideAlertsPane">
+                        <RadzenDataGrid @ref="remindersGrid" SelectionMode="DataGridSelectionMode.Single" IsLoading="@_isAlertsLoading" Count="@_alertsCount" Data="@TaskAlerts"
+                                        AllowSorting="true" AllowFiltering="true" AllowPaging="true" PageSize="3" TItem="QTDTaskAlert">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="QTDTaskAlert" Property="TaskDesc" Title="Task" Width="130px"></RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="QTDTaskAlert" Property="DueDate" FormatString="{M/d/yyyy HH:mm}" Title="Complete By" Width="120px">
+                                    <Template Context="nTaskAlert">
+                                        @String.Format("{0:g}", nTaskAlert.DueDate)
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="QTDTaskAlert" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="30px">
+                                    <Template Context="nTaskAlert">
+                                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" Click="@(args => DeleteAlertRow(nTaskAlert))" @onclick:stopPropagation="true">
+                                        </RadzenButton>
+                                    </Template>
+                                    <EditTemplate Context="nTaskAlert">
+                                        <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="close" Size="ButtonSize.Small" Click="@(args => DeleteAlertRow(nTaskAlert))">
+                                        </RadzenButton>
+                                    </EditTemplate>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </div>
+                    <div>
+                        <RadzenLabel Text="You have no task reminders at the moment" @bind-Visible="@IsHideAlertsPane" />
+                    </div>
+                    
+
+                </div>
+
+
+
+
+
+
+
+
+
+
+            </div>
+        </div>
+    </div>
+       
+</body>
+</html>
+
+<RadzenNotification />
+
+@code
+{
+
+
+    int currAttachIndex = 0;
+
+
+
+    #region ATTACHMENTS
+
+    string imgSrc;
+    string Message;
+    IFileListEntry file = null;
+    byte[] _fileBytes = null;
+    QTDAttachment taskAttach = new QTDAttachment();
+    string _defaultFileGraphic = "doc48.png";
+    string _attachType = "";
+
+
+
+
+
+
+    public async Task HandleFileSelection(IFileListEntry[] files)
+    {
+        if ((files != null) && (files.Any()))
+        {
+            file = files.First();
+
+            byte[] buffer = null;
+            using (MemoryStream ms = new MemoryStream())
+            {
+                // Convert file to bytes
+                await file.Data.CopyToAsync(ms);
+                buffer = ms.ToArray();
+            }
+
+            string uniqueFilename = string.Format("{0}{1}{2}", DateTime.Now.Ticks.ToString(), "_", file.Name);
+            string filename = $"{Environment.CurrentDirectory}\\files\\{uniqueFilename}";
+            File.WriteAllBytes(filename, buffer);
+
+            // Init attachment object
+            QTDAttachment t = new QTDAttachment()
+            {
+                TaskID = _selectedTask.TaskID,
+                TaskAttachmentLink = string.Format(@"/files/{0}", uniqueFilename),
+                TaskAttachmentLinkFriendly = file.Name,
+                TaskAttachmentFileName = filename,
+                DateCreated = DateTime.Now,
+                FileType = file.Type,
+                FileSize = file.Size
+            };
+
+            //Generate thumdnail
+            if (t.IsImage == true)
+            {
+                var format = "image/png";
+                var resizedImageFile = await file.ToImageFileAsync(format, 25, 25);
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    await resizedImageFile.Data.CopyToAsync(ms);
+                    t.ContentBytes = ms.ToArray();
+                }
+            }
+
+            try
+            {
+                t.TaskAttachmentID = _dp.SaveAttachment(t);
+            }
+            catch (Exception ex)
+            {
+                int x = 0;
+            }
+            attachments.Add(t);
+        }
+    }
+
+
+
+
+    #endregion
+
+
+
+    #region FIELDS
+
+    private Collection<QTDTask> tasks;
+    private Collection<QTDReminder> reminders;
+    private Collection<QTDTaskStatus> taskStatusOptions;
+    RadzenDataGrid<QTDTask> tasksGrid;
+    private QTDTask _selectedTask = new QTDTask();
+    RadzenDataGrid<QTDAttachment> attachGrid;
+    private Collection<QTDAttachment> attachments;
+    bool showAllFlag = false;
+    RadzenDataGrid<QTDTaskAlert> remindersGrid;
+    private Collection<QTDTaskAlert> _reminderAlerts;
+
+    bool IsHideAlertsPane = true;
+
+    bool isLoading;
+    int count;
+
+    bool _isAlertsLoading;
+    int _alertsCount;
+
+    int value;
+
+    QTDTask nTask = new QTDTask() { DueDate = DateTime.Now };
+    QTDTaskAlert nTaskAlert = new QTDTaskAlert();
+
+    #endregion
+
+    #region BINDABLE_PROPS
+
+    bool IsHideDetailPane
+    {
+        get
+        {
+            if ((_selectedTask == null) || (_selectedTask.TaskID == 0))
+                return true;
+            else
+                return false;
+        }
+    }
+
+    string SelectedTaskDesc
+    {
+        get { return _selectedTask == null ? string.Empty : _selectedTask.TaskDesc; }
+        set
+        {
+            if (_selectedTask == null)
+            {
+                _selectedTask = new QTDTask() { TaskDesc = value };
+            }
+        }
+    }
+
+    string SelectedTaskDescHdr
+    {
+        get { return _selectedTask == null ? string.Empty : string.Format("{0}{1}", "Task Detail: ", _selectedTask.TaskDesc); }
+        set
+        {
+            if (_selectedTask == null)
+            {
+                _selectedTask = new QTDTask() { TaskDesc = value };
+            }
+            else
+            {
+                _selectedTask.TaskDesc = value;
+            }
+        }
+    }
+
+    DateTime SelectedTaskDueDate
+    {
+        get { return _selectedTask == null ? DateTime.Now : _selectedTask.DueDate; }
+        set
+        {
+            if (_selectedTask == null)
+            {
+                _selectedTask = new QTDTask() { DueDate = value };
+            }
+            else
+            {
+                _selectedTask.DueDate = value;
+            }
+        }
+    }
+
+    int SelectedTaskStatus
+    {
+        get { return _selectedTask == null ? 1 : _selectedTask.TaskStatusID; }
+        set
+        {
+            if (_selectedTask == null)
+            {
+                _selectedTask = new QTDTask() { TaskStatusID = value };
+            }
+            else
+            {
+                _selectedTask.TaskStatusID = value;
+                _selectedTask.TaskStatus = taskStatusOptions.Where(x => x.TaskStatusID == value).Select(x => x.TaskStatusDesc).FirstOrDefault();
+            }
+        }
+    }
+
+    int SelectedTaskReminder
+    {
+        get { return _selectedTask == null ? 1 : _selectedTask.ReminderID; }
+        set
+        {
+            if (_selectedTask == null)
+            {
+                _selectedTask = new QTDTask() { ReminderID = value };
+            }
+            else
+            {
+                _selectedTask.ReminderID = value;
+                _selectedTask.Reminder = reminders.Where(x => x.ReminderID == value).Select(x => x.ReminderScheduleDesc).FirstOrDefault();
+            }
+        }
+    }
+
+    List<QTDTaskAlert> TaskAlerts
+    {
+        get
+        {
+            if (_reminderAlerts != null)
+                return (_reminderAlerts.Where(x => x.IsDismissed == false)).ToList();
+
+            return null;
+        }
+    }
+
+
+    #endregion
+
+    #region DB_Calls
+
+    /// <summary>
+    ///     Async task load
+    /// </summary>
+    async Task LoadTasks(LoadDataArgs args)
+    {
+        isLoading = true;
+
+        var result = await Task.Run(() => GetTasks());
+        tasks = result;
+        count = tasks.Count;
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    void LoadAttachments(int taskID)
+    {
+        attachments = GetAttachments(taskID);
+    }
+
+    private Collection<QTDTask> GetTasks()
+    {
+        return _dp.GetTasks(Security.CurrentUser, showAllFlag);
+    }
+
+    private Collection<QTDAttachment> GetAttachments(int taskID)
+    {
+        return _dp.GetTaskAttachments(taskID);
+    }
+
+    private Collection<QTDReminder> GetReminders()
+    {
+        return _dp.GetReminders();
+    }
+
+    private Collection<QTDTaskStatus> GetTaskStatusOptions()
+    {
+        return _dp.GetTaskStatusOptions();
+    }
+
+    private void LoadStatusOptions()
+    {
+        taskStatusOptions = _dp.GetTaskStatusOptions();
+    }
+
+    private void LoadReminders()
+    {
+        reminders = _dp.GetReminders();
+    }
+
+    private void LoadTasks()
+    {
+        isLoading = true;
+        tasks = _dp.GetTasks(Security.CurrentUser, showAllFlag);
+        count = tasks.Count;
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    Task LoadRefData()
+    {
+        List<Task> taskList = new List<Task>();
+        var task = Task.Run(() => LoadStatusOptions());
+        var task2 = Task.Run(() => LoadReminders());
+        taskList.Add(task);
+        taskList.Add(task2);
+        Task.WaitAll(taskList.ToArray());
+        return Task.FromResult(0);
+    }
+
+    #endregion
+
+    #region TASK_GRID_OPERATIONS
+
+    void EditRow(QTDTask nTask)
+    {
+        tasksGrid.EditRow(nTask);
+    }
+
+    void InsertTask()
+    {
+        tasksGrid.InsertRow(new QTDTask()
+        {
+            ReminderID = reminders.Where(x => x.ReminderScheduleDesc == "15 minutes before").Select(x => x.ReminderID).FirstOrDefault(),
+            TaskStatusID = taskStatusOptions.Where(x => x.TaskStatusDesc == "Not Started").Select(x => x.TaskStatusID).FirstOrDefault()
+        });
+        count = tasksGrid.Count;
+    }
+
+    void RefreshTaskGrid()
+    {
+        //tasksGrid.Reload();
+        LoadTasks();
+    }
+
+    void OnCreateRow(QTDTask nTask)
+    {
+        nTask.TaskID = _dp.SaveTask(Security.CurrentUser, nTask);
+    }
+
+    void RowSelect(QTDTask t)
+    {
+        _selectedTask = t;
+        LoadAttachments(t.TaskID);
+
+        //// Get attachments for the selected task
+        //if (t == null)
+        //    IsHideDetailPane = true;
+        //else
+        //{
+        //    LoadAttachments(t.TaskID);
+        //    IsHideDetailPane = false;
+        //}
+    }
+
+    void OnCbShowAllTasksChanged(bool value, string name)
+    {
+        showAllFlag = value;
+        RefreshTaskGrid();
+    }
+
+    void RowDeselect(QTDTask t)
+    {
+        int x = 0;
+    }
+
+    void SaveRow(QTDTask nTask)
+    {
+        nTask.Reminder = reminders.Where(x => x.ReminderID == nTask.ReminderID).Select(x => x.ReminderScheduleDesc).FirstOrDefault();
+        nTask.TaskStatus = taskStatusOptions.Where(x => x.TaskStatusID == nTask.TaskStatusID).Select(x => x.TaskStatusDesc).FirstOrDefault();
+        tasksGrid.UpdateRow(nTask);
+    }
+
+    void OnUpdateRow(QTDTask nTask)
+    {
+        _dp.EditTask(Security.CurrentUser, nTask);
+    }
+
+    void DeleteRow(QTDTask nTask)
+    {
+        _dp.DeleteTask(Security.CurrentUser, nTask.TaskID);
+        RefreshTaskGrid();
+        //tasks.Remove(nTask);
+        _selectedTask = null;
+        StateHasChanged();
+    }
+
+
+
+    void CancelEdit(QTDTask t)
+    {
+        tasksGrid.CancelEditRow(t);
+    }
+
+    #endregion
+
+    #region REMINDER_GRID_OPERATIONS
+
+    void DeleteAlertRow(QTDTaskAlert nTaskAlert)
+    {
+        if (nTaskAlert != null)
+            nTaskAlert.IsDismissed = true;
+
+        StateHasChanged();
+    }
+
+    #endregion
+
+
+
+
+
+    #region STARTUP
+
+    /// <summary>
+    ///     LOAD REF DATA HERE => REMINERS + STATUS LOOKUPS
+    ///     RUN IN PARALLEL
+    ///     EXCEPTION =>
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRefData();
+    }
+
+    protected override void OnInitialized()
+    {
+        LoadTasks();
+        TimerService.UpdateEvent += OnTimerElapsed;
+    }
+
+    //protected override void OnInitialized()
+    //{
+    //    TimerService.UpdateEvent += async date =>
+    //    {
+    //        await InvokeAsync(() =>
+    //        {
+    //            BookTaskAlerts();
+    //            StateHasChanged();
+    //        });
+    //    };
+    //}
+
+
+
+    async Task OnTimerElapsed(DateTime date)
+    {
+        await InvokeAsync(() =>
+        {
+            BookTaskAlerts();
+            StateHasChanged();
+        });
+    }
+
+
+
+    private void BookTaskAlerts()
+    {
+        // IF THERE ARE ANY ALERTS => ADD THEM TO COLLECTION
+        var alerts = _dp.GetTaskAlerts(Security.CurrentUser);
+        if ((alerts != null) && (alerts.Any()))
+        {
+            if (_reminderAlerts == null)
+                _reminderAlerts = new Collection<QTDTaskAlert>();
+
+            // ARE THERE ANY NEW ALERTS ?
+            var newItems = alerts.Where(x => !_reminderAlerts.Any(y => x.TaskID == y.TaskID));
+            if (newItems.Any())
+            {
+                foreach (var a in newItems)
+                    _reminderAlerts.Add(a);
+
+                var duration = 60 * (60 * 1000);
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Task Reminders", Detail = "You have task reminders", Duration = duration });
+            }
+
+            _alertsCount = _reminderAlerts.Count;
+            _isAlertsLoading = false;
+
+            if (_alertsCount > 0)
+                IsHideAlertsPane = false;
+            else
+                IsHideAlertsPane = true;
+        }
+    }
+
+
+
+    #endregion
+
+
+    public void Dispose()
+    {
+        TimerService.UpdateEvent -= OnTimerElapsed;
+    }
+
+
+
+}

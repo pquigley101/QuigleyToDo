@@ -1,0 +1,138 @@
+﻿@page "/notification"
+
+@using QuigleyToDo.DataAccess;
+@using QuigleyToDo.DataAccess.Model;
+@using System.Collections.ObjectModel;
+
+@inject DialogService DialogService
+@implements IDisposable
+@inject DataProvider _dp
+@inject IJSRuntime JsRuntime
+@inject NotificationService NotificationService
+
+@using System.Threading;
+@using QuigleyToDo.Data
+
+<h3>@time</h3>
+<h3>@time2</h3>
+
+
+
+<div class="blink">
+
+</div>
+
+
+<RadzenListBox TValue="string" Data=@alerts />
+<br />
+
+<RadzenListBox TValue="QTDTaskAlert" Data=@actualAlerts TextProperty="TaskDesc" ValueProperty="TaskDesc" />
+
+
+<RadzenButton Text="Show info notification" Style="margin-bottom: 20px; width: 200px"
+              ButtonStyle="ButtonStyle.Info"
+              Click=@(args => ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Info Summary", Detail = "Info Detail", Duration = 4000 })) />
+
+
+<RadzenNotification />
+
+@code {
+
+
+    void ShowNotification(NotificationMessage message)
+    {
+        NotificationService.Notify(message);
+
+
+    }
+
+
+    string time;
+    static string time2;
+
+    List<string> alerts = new List<string>();
+    //List<QTDTaskAlert> actualAlerts = new List<QTDTaskAlert>();
+    Collection<QTDTaskAlert> actualAlerts = new Collection<QTDTaskAlert>();
+
+    //actualAlerts.Add( ta );
+
+    Func<DateTime, Task> myDel;
+
+    //static void PrintTime(object state)
+    //{
+    //    ShowInlineDialog();
+    //}
+
+    async Task CheckForDueTasks()
+    {
+        await ShowInlineDialog();
+
+    }
+
+    //TimerCallback timeCB = new TimerCallback(PrintTime);
+
+    protected override void OnInitialized()
+    {
+        //QTDTaskAlert ta = new QTDTaskAlert() { TaskDesc = "ALERT1" };
+        //actualAlerts.Add(ta);
+
+        TimerService.UpdateEvent += OnTimerElapsed;
+
+        //TimerService.UpdateEvent += async date =>
+        //{
+        //    await InvokeAsync(() =>
+        //    {
+        //        //CheckForDueTasks();
+        //        time = date.ToLongTimeString();
+        //        alerts.Add(date.ToLongTimeString());
+        //        actualAlerts = _dp.GetTaskAlerts();
+        //        //actualAlerts.Add(new QTDTaskAlert() { TaskDesc = DateTime.Now.Millisecond.ToString() });
+        //        //JsRuntime.InvokeVoidAsync("alert", "Warning!");
+        //        ShowNotification(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Info Summary", Detail = Environment.NewLine +  "Info Detail", Duration = null });
+        //        StateHasChanged();
+        //    });
+        //};
+    }
+
+    async Task OnTimerElapsed(DateTime date)
+    {
+        await InvokeAsync(() =>
+        {
+            time = date.ToLongTimeString();
+            StateHasChanged();
+            return Task.FromResult(0);
+        });
+    }
+
+    public void Dispose()
+    {
+        //// The DialogService is a singleton so it is advisable to unsubscribe.
+        //DialogService.OnOpen -= Open;
+        //DialogService.OnClose -= Close;
+
+        TimerService.UpdateEvent -= OnTimerElapsed;
+    }
+
+    async Task ShowInlineDialog()
+    {
+        var result = await DialogService.OpenAsync("Simple Dialog", ds =>
+    @<div>
+        <p Style="margin-bottom: 1rem">Confirm?</p>
+        <div class="row">
+            <div class="col-md-12">
+                <RadzenButton Text="Ok" Style="margin-bottom: 10px; width: 150px" />
+                <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Secondary" Style="margin-bottom: 10px; width: 150px" />
+                <RadzenButton Text="Refresh" ButtonStyle="ButtonStyle.Info" Style="margin-bottom: 10px; width: 150px" />
+                TASK ID: 100
+            </div>
+        </div>
+    </div>);
+  StateHasChanged();
+}
+
+
+
+
+
+}
+
